@@ -1,5 +1,6 @@
 require "ood_core/refinements/hash_extensions"
 require "json"
+require "logger"
 
 # Utility class for the Kubernetes adapter to interact
 # with the Kuberenetes APIs.
@@ -17,9 +18,16 @@ class OodCore::Job::Adapters::Kubernetes::Batch
   attr_reader :all_namespaces, :helper
   attr_reader :username_prefix, :namespace_prefix
   attr_reader :auto_supplemental_groups
+  attr_reader :logger
 
   def initialize(options = {})
     options = options.to_h.symbolize_keys
+
+    @logger = Logger.new(STDOUT)
+    @logger.level = Logger::INFO
+    @logger.formatter = proc do |severity, datetime, progname, msg|
+      "[#{datetime}] #{severity}: #{msg}\n"
+    end
 
     @config_file = options.fetch(:config_file, self.class.default_config_file)
     @bin = options.fetch(:bin, '/usr/bin/kubectl')
@@ -34,6 +42,17 @@ class OodCore::Job::Adapters::Kubernetes::Batch
     @context = tmp_ctx.nil? && oidc_auth?(options.fetch(:auth, {}).symbolize_keys) ? @cluster : tmp_ctx
 
     @helper = OodCore::Job::Adapters::Kubernetes::Helper.new
+
+    @logger.info("Initialized Kubernetes Batch adapter with:")
+    @logger.info("  config_file: #{@config_file}")
+    @logger.info("  bin: #{@bin}")
+    @logger.info("  cluster: #{@cluster}")
+    @logger.info("  context: #{@context}")
+    @logger.info("  namespace_prefix: #{@namespace_prefix}")
+    @logger.info("  username_prefix: #{@username_prefix}")
+    @logger.info("  all_namespaces: #{@all_namespaces}")
+    @logger.info("  auto_supplemental_groups: #{@auto_supplemental_groups}")
+    @logger.info("  mounts: #{@mounts.inspect}")
   end
 
   def resource_file(resource_type = 'pod')
