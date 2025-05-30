@@ -1,6 +1,7 @@
 require "ood_core/refinements/hash_extensions"
 require "json"
 require "logger"
+require "fileutils"
 
 # Utility class for the Kubernetes adapter to interact
 # with the Kuberenetes APIs.
@@ -14,6 +15,9 @@ class OodCore::Job::Adapters::Kubernetes::Batch
   class Error < StandardError; end
   class NotFoundError < StandardError; end
 
+  LOG_FILE = "/var/log/ood/core.log"
+  LOG_DIR = File.dirname(LOG_FILE)
+
   attr_reader :config_file, :bin, :cluster, :context, :mounts
   attr_reader :all_namespaces, :helper
   attr_reader :username_prefix, :namespace_prefix
@@ -23,11 +27,7 @@ class OodCore::Job::Adapters::Kubernetes::Batch
   def initialize(options = {})
     options = options.to_h.symbolize_keys
 
-    @logger = Logger.new(STDOUT)
-    @logger.level = Logger::INFO
-    @logger.formatter = proc do |severity, datetime, progname, msg|
-      "[#{datetime}] #{severity}: #{msg}\n"
-    end
+    setup_logger
 
     @config_file = options.fetch(:config_file, self.class.default_config_file)
     @bin = options.fetch(:bin, '/usr/bin/kubectl')
@@ -43,16 +43,13 @@ class OodCore::Job::Adapters::Kubernetes::Batch
 
     @helper = OodCore::Job::Adapters::Kubernetes::Helper.new
 
-    @logger.info("Initialized Kubernetes Batch adapter with:")
-    @logger.info("  config_file: #{@config_file}")
-    @logger.info("  bin: #{@bin}")
-    @logger.info("  cluster: #{@cluster}")
-    @logger.info("  context: #{@context}")
-    @logger.info("  namespace_prefix: #{@namespace_prefix}")
-    @logger.info("  username_prefix: #{@username_prefix}")
-    @logger.info("  all_namespaces: #{@all_namespaces}")
-    @logger.info("  auto_supplemental_groups: #{@auto_supplemental_groups}")
-    @logger.info("  mounts: #{@mounts.inspect}")
+    log_initialization
+  rescue => e
+    # If we can't log to file, fall back to STDOUT for critical errors
+    fallback_logger = Logger.new(STDOUT)
+    fallback_logger.error("Failed to initialize Kubernetes Batch adapter: #{e.message}")
+    fallback_logger.error(e.backtrace.join("\n"))
+    raise
   end
 
   def resource_file(resource_type = 'pod')
@@ -160,6 +157,41 @@ class OodCore::Job::Adapters::Kubernetes::Batch
   end
 
   private
+
+  def setup_logger
+    begin
+      # Ensure log directory exists and is writable
+      FileUtils.mkdir_p(LOG_DIR) unless Dir.exist?(LOG_DIR)
+      FileUtils.touch(LOG_FILE) unless File.exist?(LOG_FILE)
+      
+      @logger = Logger.new(LOG_FILE, 'daily')
+      @logger.level = Logger::INFO
+      @logger.formatter = proc do |severity, datetime, progname, msg|
+        "[#{datetime}] #{severity} [#{self.class.name}]: #{msg}\n"
+      end
+    rescue => e
+      # If we can't set up file logging, use STDOUT
+      @logger = Logger.new(STDOUT)
+      @logger.level = Logger::INFO
+      @logger.warn("Could not set up file logging to #{LOG_FILE}: #{e.message}")
+      @logger.warn("Falling back to STDOUT logging")
+    end
+  end
+
+  def log_initialization
+    @logger.info("Initialized Kubernetes Batch adapter with:")
+    @logger.info("  config_file: #{@config_file}")
+    @logger.info("  bin: #{@bin}")
+    @logger.info("  cluster: #{@cluster}")
+    @logger.info("  context: #{@context}")
+    @logger.info("  namespace_prefix: #{@namespace_prefix}")
+    @logger.info("  username_prefix: #{@username_prefix}")
+    @logger.info("  all_namespaces: #{@all_namespaces}")
+    @logger.info("  auto_supplemental_groups: #{@auto_supplemental_groups}")
+    @logger.info("  mounts: #{@mounts.inspect}")
+  rescue => e
+    @logger.error("Failed to log initialization: #{e.message}")
+  end
 
   def safe_call(verb, resource, id)
     begin
@@ -405,12 +437,27 @@ class OodCore::Job::Adapters::Kubernetes::Batch
   end
 
   def call(cmd = '', env: {}, stdin: nil)
+    @logger.debug("Executing command: #{cmd}")
     o, e, s = Open3.capture3(env, cmd, stdin_data: stdin.to_s)
-    s.success? ? o : interpret_and_raise(e)
+    if s.success?
+      @logger.debug("Command succeeded")
+      o
+    else
+      @logger.error("Command failed: #{e}")
+      interpret_and_raise(e)
+    end
+  rescue => e
+    @logger.error("Exception during command execution: #{e.message}")
+    raise
   end
 
   def interpret_and_raise(stderr)
-    raise NotFoundError, stderr if /^Error from server \(NotFound\):/.match(stderr)
-    raise(Error, stderr)
+    if /^Error from server \(NotFound\):/.match(stderr)
+      @logger.warn("Resource not found: #{stderr}")
+      raise NotFoundError, stderr
+    else
+      @logger.error("Error from server: #{stderr}")
+      raise(Error, stderr)
+    end
   end
 end
