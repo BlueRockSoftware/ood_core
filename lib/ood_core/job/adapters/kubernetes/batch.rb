@@ -15,7 +15,7 @@ class OodCore::Job::Adapters::Kubernetes::Batch
   class Error < StandardError; end
   class NotFoundError < StandardError; end
 
-  LOG_FILE = "/var/log/ood/core.log"
+  LOG_FILE = "/tmp/ood-core.log"
   LOG_DIR = File.dirname(LOG_FILE)
 
   attr_reader :config_file, :bin, :cluster, :context, :mounts
