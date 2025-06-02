@@ -279,20 +279,61 @@ class OodCore::Job::Adapters::Kubernetes::Batch
   # helper to template resource yml you're going to submit and
   # create an id.
   def generate_id_yml(script)
+    @logger.debug("Starting generate_id_yml with script: #{script.inspect}")
+    
     native_data = script.native
+    @logger.debug("Native data: #{native_data.inspect}")
+    
+    if native_data.nil?
+      @logger.error("script.native returned nil")
+      raise Error, "Native data cannot be nil"
+    end
+    
+    if native_data[:container].nil?
+      @logger.error("native_data[:container] is nil. Full native_data: #{native_data.inspect}")
+      raise Error, "Container configuration cannot be nil"
+    end
+
+    # Initialize container if it doesn't exist
+    native_data[:container] ||= {}
+    native_data[:container][:supplemental_groups] ||= []
+    
+    @logger.debug("Before supplemental_groups modification - container: #{native_data[:container].inspect}")
     native_data[:container][:supplemental_groups] = supplemental_groups(native_data[:container][:supplemental_groups])
+    @logger.debug("After supplemental_groups modification - container: #{native_data[:container].inspect}")
+
     container = helper.container_from_native(native_data[:container], default_env)
+    @logger.debug("Created container from native data: #{container.inspect}")
+    
     id = generate_id(container.name)
+    @logger.debug("Generated ID: #{id}")
+    
     configmap = helper.configmap_from_native(native_data, id, script.content)
+    @logger.debug("Created configmap: #{configmap.inspect}")
+    
     init_containers = helper.init_ctrs_from_native(native_data[:init_containers], container.env)
+    @logger.debug("Created init containers: #{init_containers.inspect}")
+    
     spec = OodCore::Job::Adapters::Kubernetes::Resources::PodSpec.new(container, init_containers: init_containers)
+    @logger.debug("Created pod spec: #{spec.inspect}")
+    
     all_mounts = native_data[:mounts].nil? ? mounts : mounts + native_data[:mounts]
+    @logger.debug("Using mounts: #{all_mounts.inspect}")
+    
     node_selector = native_data[:node_selector].nil? ? {} : native_data[:node_selector]
+    @logger.debug("Using node selector: #{node_selector.inspect}")
+    
     gpu_type = native_data[:gpu_type].nil? ? "nvidia.com/gpu" : native_data[:gpu_type]
+    @logger.debug("Using GPU type: #{gpu_type}")
 
     template = ERB.new(File.read(resource_file), trim_mode: '-')
+    @logger.debug("Created ERB template from #{resource_file}")
 
     [template.result(binding), id]
+  rescue => e
+    @logger.error("Error in generate_id_yml: #{e.message}")
+    @logger.error("Backtrace: #{e.backtrace.join("\n")}")
+    raise
   end
 
   # helper to call kubectl and get json data back.
@@ -346,7 +387,7 @@ class OodCore::Job::Adapters::Kubernetes::Batch
     info_array = []
     pods.each do |pod|
       info = pod_info_from_json(pod)
-      info_array.push(info) unless info.nil?
+      info_array.push(info unless info.nil?)
     end
 
     info_array
