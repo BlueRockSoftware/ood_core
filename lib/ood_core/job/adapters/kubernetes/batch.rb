@@ -387,7 +387,7 @@ class OodCore::Job::Adapters::Kubernetes::Batch
     info_array = []
     pods.each do |pod|
       info = pod_info_from_json(pod)
-      info_array.push(info unless info.nil?)
+      info_array.push(info) if info
     end
 
     info_array
