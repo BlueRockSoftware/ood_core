@@ -174,8 +174,8 @@ class OodCore::Job::Adapters::Kubernetes::Helper
   private
 
   def get_host(ip)
-    Resolv.getname(ip)
-  rescue Resolv::ResolvError
+  #  Resolv.getname(ip)
+  # rescue Resolv::ResolvError
     ip
   end
 
