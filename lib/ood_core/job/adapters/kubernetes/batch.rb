@@ -237,32 +237,32 @@ class OodCore::Job::Adapters::Kubernetes::Batch
   end
 
   def run_as_user
-    if @native_data && @native_data[:container] && @native_data[:container][:security_context]
-      @native_data[:container][:security_context][:run_as_user]
+    if @native_data && @native_data[:container] && @native_data[:container][:securityContext]
+      @native_data[:container][:securityContext][:runAsUser]
     else
       user.uid
     end
   end
 
   def run_as_group
-    if @native_data && @native_data[:container] && @native_data[:container][:security_context]
-      @native_data[:container][:security_context][:run_as_group]
+    if @native_data && @native_data[:container] && @native_data[:container][:securityContext]
+      @native_data[:container][:securityContext][:runAsGroup]
     else
       user.gid
     end
   end
 
   def run_as_non_root
-    if @native_data && @native_data[:container] && @native_data[:container][:security_context]
-      @native_data[:container][:security_context][:run_as_non_root]
+    if @native_data && @native_data[:container] && @native_data[:container][:securityContext]
+      @native_data[:container][:securityContext][:runAsNonRoot]
     else
       true
     end
   end
 
   def fs_group
-    if @native_data && @native_data[:container] && @native_data[:container][:security_context]
-      @native_data[:container][:security_context][:fs_group]
+    if @native_data && @native_data[:container] && @native_data[:container][:securityContext]
+      @native_data[:container][:securityContext][:fsGroup]
     else
       run_as_group
     end
