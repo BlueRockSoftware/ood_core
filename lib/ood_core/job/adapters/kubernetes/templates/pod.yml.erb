@@ -22,9 +22,9 @@ spec:
   securityContext:
     runAsUser: <%= run_as_user %>
     runAsGroup: <%= run_as_group %>
-    runAsNonRoot: true
-    supplementalGroups: <%= spec.container.supplemental_groups %>
+    runAsNonRoot: <%= run_as_non_root %>
     fsGroup: <%= fs_group %>
+    supplementalGroups: <%= @native_data[:container][:supplemental_groups] %>
   hostNetwork: false
   hostIPC: false
   hostPID: false
