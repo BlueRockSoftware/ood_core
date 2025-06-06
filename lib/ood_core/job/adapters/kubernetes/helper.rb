@@ -152,7 +152,7 @@ class OodCore::Job::Adapters::Kubernetes::Helper
   # @return [String] a sanitized name suitable for Kubernetes
   def sanitize_volume_name(filename)
     # Convert to lowercase, replace invalid chars (including dots) with hyphens
-    name = filename.downcase.gsub(/[^a-z0-9\-_]/, '-')
+    name = filename.downcase.gsub(/[^a-z0-9\-]/, '-')
     # Ensure starts/ends with alphanumeric
     name = "vol-#{name}" unless name =~ /^[a-z0-9]/
     name = "#{name}-vol" unless name =~ /[a-z0-9]$/
