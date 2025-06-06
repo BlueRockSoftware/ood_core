@@ -173,6 +173,21 @@ class OodCore::Job::Adapters::Kubernetes::Helper
 
   private
 
+  # Sanitizes a filename to be a valid Kubernetes volume name
+  # Kubernetes names must be lowercase, alphanumeric, or '-', '.', '_'
+  # and must start/end with alphanumeric
+  # @param filename [String] the filename to sanitize
+  # @return [String] a sanitized name suitable for Kubernetes
+  def sanitize_volume_name(filename)
+    # Convert to lowercase, replace invalid chars with hyphens
+    name = filename.downcase.gsub(/[^a-z0-9\-\._]/, '-')
+    # Ensure starts/ends with alphanumeric
+    name = "vol-#{name}" unless name =~ /^[a-z0-9]/
+    name = "#{name}-vol" unless name =~ /[a-z0-9]$/
+    # Truncate to reasonable length (Kubernetes has a 63 char limit)
+    name[0..62]
+  end
+
   def get_host(ip)
   #  Resolv.getname(ip)
   # rescue Resolv::ResolvError

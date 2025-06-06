@@ -77,7 +77,8 @@ spec:
     <%- unless configmap.nil? -%>
     <%- configmap.files.each do |file| -%>
       <%- next if file.mount_path.nil? -%>
-    - name: configmap-volume
+      <%- volume_name = helper.sanitize_volume_name(file.filename) -%>
+    - name: <%= volume_name %>
       mountPath: <%= file.mount_path %>
       <%- unless file.sub_path.nil? -%>
       subPath: <%= file.sub_path %>
@@ -163,9 +164,15 @@ spec:
   <%- unless (configmap.to_s.empty? && all_mounts.empty?) -%>
   volumes:
   <%- unless configmap.to_s.empty? -%>
-  - name: configmap-volume
+  <%- configmap.files.each do |file| -%>
+  <%- volume_name = helper.sanitize_volume_name(file.filename) -%>
+  - name: <%= volume_name %>
     configMap:
       name: <%= configmap_name(id) %>
+      items:
+      - key: <%= file.filename %>
+        path: <%= file.sub_path || file.filename %>
+  <%- end # end configmap.files.each -%>
   <%- end -%>
   <%- all_mounts.each do |mount| -%>
   <%- if mount[:type] == 'nfs' -%>
