@@ -147,8 +147,9 @@ spec:
     <%- end # end configmap.files.each -%>
     <%- end # unless configmap.nil? -%>
     <%- all_mounts.each do |mount| -%>
+    <%- next if mount[:init_destination_path].nil? -%>
     - name: <%= mount[:name] %>
-      mountPath: <%= mount[:destination_path] %>
+      mountPath: <%= mount[:init_destination_path] %>
     <%- end # for each mount -%>
     <%- end # if config_map init mounts and all_mounts not empty -%>
     securityContext:

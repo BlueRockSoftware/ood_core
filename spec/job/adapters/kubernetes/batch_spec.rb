@@ -1,6 +1,7 @@
 require "ood_core/job/adapters/kubernetes"
 require "ood_core/job/adapters/kubernetes/batch"
 require 'tmpdir'
+require 'yaml'
 
 describe OodCore::Job::Adapters::Kubernetes::Batch do
 
@@ -285,6 +286,50 @@ EOS
         **{
           content: nil
         }.merge(opts)
+      )
+    end
+
+    let(:script) do
+      OodCore::Job::Script.new(
+        content: script_content,
+        native: {
+          container: {
+            name: 'rspec-test',
+            image: 'ruby:2.7',
+            command: 'bash',
+            port: 8080,
+            env: {
+              HOME: '/home',
+              PATH: '/usr/bin'
+            },
+            memory: '1Gi',
+            cpu: '1',
+            working_dir: '/home',
+            restart_policy: 'Never',
+            image_pull_policy: 'IfNotPresent',
+            securityContext: {
+              runAsUser: 1000,
+              runAsGroup: 1000,
+              runAsNonRoot: true
+            }
+          },
+          configmap: {
+            files: [
+              {
+                filename: 'test1.conf',
+                data: "test1 data\n",
+                mount_path: '/etc/test/',
+                sub_path: 'test1.conf'
+              },
+              {
+                filename: 'test2.conf',
+                data: "test2 data\n",
+                mount_path: '/etc/test/',
+                sub_path: 'test2.conf'
+              }
+            ]
+          }
+        }
       )
     end
 
@@ -840,6 +885,41 @@ EOS
         @basic_batch.submit(script)
         expect(File.exist?(pod_yml_path)).to be true
         #expect(template.to_s).to eql(File.read(pod_yml_path))
+      end
+    end
+
+    it 'creates unique volume names for each configmap file' do
+      allow(batch).to receive(:call).and_return('{}')
+      allow(batch).to receive(:generate_id).and_return('test-id')
+      
+      # Capture the generated YAML
+      yaml_content = nil
+      allow(File).to receive(:open).with(any_args) do |path, mode, &block|
+        if path.end_with?('pod.yml')
+          yaml_content = block.call(File.new('/dev/null'))
+        end
+      end
+      
+      batch.submit(script)
+      
+      # Parse the YAML and verify volume names
+      yaml = YAML.load(yaml_content)
+      volume_mounts = yaml['spec']['containers'][0]['volumeMounts']
+      volumes = yaml['spec']['volumes']
+      
+      # Verify we have two volume mounts with different names
+      expect(volume_mounts.length).to eq(2)
+      expect(volume_mounts[0]['name']).not_to eq(volume_mounts[1]['name'])
+      
+      # Verify the volume names match between mounts and volumes
+      volume_names = volumes.map { |v| v['name'] }
+      mount_names = volume_mounts.map { |m| m['name'] }
+      expect(volume_names).to match_array(mount_names)
+      
+      # Verify the volume names are sanitized
+      volume_names.each do |name|
+        expect(name).to match(/^[a-z0-9][a-z0-9\-\._]*[a-z0-9]$/)
+        expect(name.length).to be <= 63
       end
     end
   end
