@@ -326,7 +326,7 @@ class OodCore::Job::Adapters::Kubernetes::Batch
     {}
   end
 
-  # Extract conn_params from the batch_connect configuration for dashboard access (legacy method)
+  # Extract conn_params from the batch_connect configuration for dashboard access
   def extract_conn_params(native_data)
     batch_connect = native_data.dig(:batch_connect) || {}
     conn_params = batch_connect[:conn_params] || []
@@ -388,11 +388,10 @@ class OodCore::Job::Adapters::Kubernetes::Batch
     end
 
     # Extract conn_params from batch_connect configuration for dashboard use
-    @logger.debug("Full script object: #{script.inspect}")
     @logger.debug("Full native_data structure: #{@native_data.inspect}")
     @logger.debug("batch_connect section in native: #{@native_data.dig(:batch_connect).inspect}")
     
-    @conn_params_data = extract_conn_params_from_script(script)
+    @conn_params_data = extract_conn_params(@native_data)
     @logger.debug("Extracted conn_params for dashboard: #{@conn_params_data.inspect}")
     @logger.debug("conn_params_data is nil? #{@conn_params_data.nil?}")
     @logger.debug("conn_params_data is empty? #{@conn_params_data.empty?}")
