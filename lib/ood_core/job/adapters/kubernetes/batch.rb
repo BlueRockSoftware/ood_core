@@ -285,6 +285,26 @@ class OodCore::Job::Adapters::Kubernetes::Batch
     sgroups.uniq.sort
   end
 
+  # Extract conn_params from the batch_connect configuration for dashboard access
+  def extract_conn_params(native_data)
+    batch_connect = native_data.dig(:batch_connect) || {}
+    conn_params = batch_connect[:conn_params] || []
+    
+    # Convert conn_params to a hash with current context values
+    conn_data = {}
+    Array.wrap(conn_params).each do |param|
+      param_key = param.to_sym
+      # Try to get the value from various sources in native_data
+      value = native_data[param_key] || 
+              native_data.dig(:container, param_key) ||
+              batch_connect[param_key] ||
+              ""
+      conn_data[param_key] = value.to_s
+    end
+    
+    conn_data
+  end
+
   def default_env
     {
       USER: username,
@@ -313,6 +333,10 @@ class OodCore::Job::Adapters::Kubernetes::Batch
       @logger.error("native_data[:container] is nil. Full native_data: #{@native_data.inspect}")
       raise Error, "Container configuration cannot be nil"
     end
+
+    # Extract conn_params from batch_connect configuration for dashboard use
+    @conn_params_data = extract_conn_params(@native_data)
+    @logger.debug("Extracted conn_params for dashboard: #{@conn_params_data.inspect}")
 
     # Initialize container if it doesn't exist
     @native_data[:container] ||= {}

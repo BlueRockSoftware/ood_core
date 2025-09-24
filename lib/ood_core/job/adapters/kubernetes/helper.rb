@@ -170,6 +170,18 @@ class OodCore::Job::Adapters::Kubernetes::Helper
   # @return [#to_h]
   #   the hash of info expected from adapters
   def pod_info_from_json(json_data, ns_prefix: nil)
+    # Extract conn_params from pod annotations (not labels, since this is metadata only)
+    conn_info = { host: get_host(json_data.dig(:status, :hostIP)) }
+    
+    # Look for ood.conn/* annotations and extract them
+    annotations = json_data.dig(:metadata, :annotations) || {}
+    annotations.each do |key, value|
+      if key.to_s.start_with?('ood.conn/')
+        param_name = key.to_s.sub('ood.conn/', '').to_sym
+        conn_info[param_name] = value.to_s
+      end
+    end
+    
     {
       id: json_data.dig(:metadata, :name).to_s,
       job_name: name_from_metadata(json_data.dig(:metadata)),
@@ -178,7 +190,7 @@ class OodCore::Job::Adapters::Kubernetes::Helper
       submission_time: submission_time(json_data),
       dispatch_time: dispatch_time(json_data),
       wallclock_time: wallclock_time(json_data),
-      ood_connection_info: { host: get_host(json_data.dig(:status, :hostIP)) },
+      ood_connection_info: conn_info,
       procs: procs_from_json(json_data)
     }
   rescue NoMethodError
