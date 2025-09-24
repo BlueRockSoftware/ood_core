@@ -114,9 +114,9 @@ class OodCore::Job::Adapters::Kubernetes::Batch
     return OodCore::Job::Info.new(**{ id: id, status: 'completed' }) if pod_json.empty?
 
     service_json = safe_call('get', 'service', service_name(id))
-    secret_json = safe_call('get', 'secret', secret_name(id))
+    # Note: No longer retrieving secrets since conn_params are stored in pod annotations
 
-    helper.info_from_json(pod_json: pod_json, service_json: service_json, secret_json: secret_json)
+    helper.info_from_json(pod_json: pod_json, service_json: service_json, secret_json: {})
   end
 
   def status(id)
@@ -126,7 +126,7 @@ class OodCore::Job::Adapters::Kubernetes::Batch
   def delete(id)
     safe_call("delete", "pod", id)
     safe_call("delete", "service", service_name(id))
-    safe_call("delete", "secret", secret_name(id))
+    # Note: No longer deleting secrets since conn_params are stored in pod annotations
     safe_call("delete", "configmap", configmap_name(id))
   end
 
@@ -165,14 +165,14 @@ class OodCore::Job::Adapters::Kubernetes::Batch
       FileUtils.touch(LOG_FILE) unless File.exist?(LOG_FILE)
       
       @logger = Logger.new(LOG_FILE, 'daily')
-      @logger.level = Logger::INFO
+      @logger.level = Logger::DEBUG
       @logger.formatter = proc do |severity, datetime, progname, msg|
         "[#{datetime}] #{severity} [#{self.class.name}]: #{msg}\n"
       end
     rescue => e
       # If we can't set up file logging, use STDOUT
       @logger = Logger.new(STDOUT)
-      @logger.level = Logger::INFO
+      @logger.level = Logger::DEBUG
       @logger.warn("Could not set up file logging to #{LOG_FILE}: #{e.message}")
       @logger.warn("Falling back to STDOUT logging")
     end
@@ -290,7 +290,19 @@ class OodCore::Job::Adapters::Kubernetes::Batch
     batch_connect = native_data.dig(:batch_connect) || {}
     conn_params = batch_connect[:conn_params] || []
     
-    # Convert conn_params to a hash with current context values
+    # Handle case where conn_params is a pre-formatted string from Dashboard
+    if conn_params.is_a?(String)
+      @logger.debug("conn_params is a string: #{conn_params}")
+      # Parse the string format: project="value" container="value" cpu="value" memory="value"
+      conn_data = {}
+      conn_params.scan(/(\w+)="([^"]*)"/) do |key, value|
+        conn_data[key.to_sym] = value
+      end
+      @logger.debug("Parsed conn_params string into: #{conn_data.inspect}")
+      return conn_data
+    end
+    
+    # Handle case where conn_params is an array (original expected format)
     conn_data = {}
     Array.wrap(conn_params).each do |param|
       param_key = param.to_sym
@@ -335,8 +347,13 @@ class OodCore::Job::Adapters::Kubernetes::Batch
     end
 
     # Extract conn_params from batch_connect configuration for dashboard use
+    @logger.debug("Full native_data structure: #{@native_data.inspect}")
+    @logger.debug("batch_connect section: #{@native_data.dig(:batch_connect).inspect}")
+    
     @conn_params_data = extract_conn_params(@native_data)
     @logger.debug("Extracted conn_params for dashboard: #{@conn_params_data.inspect}")
+    @logger.debug("conn_params_data is nil? #{@conn_params_data.nil?}")
+    @logger.debug("conn_params_data is empty? #{@conn_params_data.empty?}")
 
     # Initialize container if it doesn't exist
     @native_data[:container] ||= {}
