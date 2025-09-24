@@ -285,7 +285,48 @@ class OodCore::Job::Adapters::Kubernetes::Batch
     sgroups.uniq.sort
   end
 
-  # Extract conn_params from the batch_connect configuration for dashboard access
+  # Extract conn_params from the script object (since batch_connect isn't in native_data)
+  def extract_conn_params_from_script(script)
+    @logger.debug("Script class: #{script.class}")
+    @logger.debug("Script methods: #{script.methods.grep(/batch|connect|native/).sort}")
+    
+    # Try to access batch_connect data through different possible attributes
+    batch_connect_data = nil
+    
+    # Check if script has batch_connect method or instance variable
+    if script.respond_to?(:batch_connect)
+      batch_connect_data = script.batch_connect
+      @logger.debug("Found batch_connect method: #{batch_connect_data.inspect}")
+    elsif script.instance_variable_defined?(:@batch_connect)
+      batch_connect_data = script.instance_variable_get(:@batch_connect)
+      @logger.debug("Found @batch_connect instance variable: #{batch_connect_data.inspect}")
+    else
+      @logger.debug("No batch_connect data found in script object")
+      return {}
+    end
+    
+    return {} if batch_connect_data.nil?
+    
+    conn_params = batch_connect_data.dig(:conn_params) || batch_connect_data['conn_params'] || ""
+    @logger.debug("Found conn_params: #{conn_params.inspect}")
+    
+    # Handle case where conn_params is a pre-formatted string from Dashboard
+    if conn_params.is_a?(String)
+      @logger.debug("conn_params is a string: #{conn_params}")
+      # Parse the string format: project="value" container="value" cpu="value" memory="value"
+      conn_data = {}
+      conn_params.scan(/(\w+)="([^"]*)"/) do |key, value|
+        conn_data[key.to_sym] = value
+      end
+      @logger.debug("Parsed conn_params string into: #{conn_data.inspect}")
+      return conn_data
+    end
+    
+    @logger.debug("conn_params was not a string, returning empty hash")
+    {}
+  end
+
+  # Extract conn_params from the batch_connect configuration for dashboard access (legacy method)
   def extract_conn_params(native_data)
     batch_connect = native_data.dig(:batch_connect) || {}
     conn_params = batch_connect[:conn_params] || []
@@ -347,10 +388,11 @@ class OodCore::Job::Adapters::Kubernetes::Batch
     end
 
     # Extract conn_params from batch_connect configuration for dashboard use
+    @logger.debug("Full script object: #{script.inspect}")
     @logger.debug("Full native_data structure: #{@native_data.inspect}")
-    @logger.debug("batch_connect section: #{@native_data.dig(:batch_connect).inspect}")
+    @logger.debug("batch_connect section in native: #{@native_data.dig(:batch_connect).inspect}")
     
-    @conn_params_data = extract_conn_params(@native_data)
+    @conn_params_data = extract_conn_params_from_script(script)
     @logger.debug("Extracted conn_params for dashboard: #{@conn_params_data.inspect}")
     @logger.debug("conn_params_data is nil? #{@conn_params_data.nil?}")
     @logger.debug("conn_params_data is empty? #{@conn_params_data.empty?}")
